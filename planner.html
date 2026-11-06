@@ -1,0 +1,712 @@
+<title>OTOS Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Familjen+Grotesk:wght@500;600;700&family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky header (brand, week strip, child filter) over a two-column body on wide screens:
+   the day's checklist on the left, the live family feed on the right. One column with tabs on phones. */
+:root {
+  --bg: #f1f4f9;
+  --surface: #ffffff;
+  --surface-2: #e8edf5;
+  --ink: #12203a;
+  --muted: #56627b;
+  --line: #d8dfeb;
+  --line-strong: #aab5ca;
+  --brand: #1f3fbf;
+  --brand-ink: #ffffff;
+  --nibi: #7a47d6;
+  --nibi-bg: #ece5fb;
+  --mayowa: #b85c00;
+  --mayowa-bg: #fbe9d0;
+  --both: #3b4a66;
+  --both-bg: #e2e7f0;
+  --ok: #167a50;
+  --ok-bg: #dcf2e7;
+  --alert: #c22f2f;
+  --alert-bg: #fbe2e2;
+  --soon-bg: #e3eaff;
+  --shadow: 0 1px 2px rgba(18, 32, 58, .06), 0 6px 18px rgba(18, 32, 58, .06);
+  --font-display: "Familjen Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "DM Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1424; --surface: #151d33; --surface-2: #1e2842; --ink: #e8ecf6; --muted: #9ba7c1;
+    --line: #2a3553; --line-strong: #4a5879; --brand: #8aa6ff; --brand-ink: #0d1424;
+    --nibi: #b99aff; --nibi-bg: #2a2048; --mayowa: #f2a14b; --mayowa-bg: #3a2a12;
+    --both: #aab6d2; --both-bg: #232d47; --ok: #4fd093; --ok-bg: #12352a;
+    --alert: #ff8080; --alert-bg: #3d1c21; --soon-bg: #1b2a57;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1424; --surface: #151d33; --surface-2: #1e2842; --ink: #e8ecf6; --muted: #9ba7c1;
+  --line: #2a3553; --line-strong: #4a5879; --brand: #8aa6ff; --brand-ink: #0d1424;
+  --nibi: #b99aff; --nibi-bg: #2a2048; --mayowa: #f2a14b; --mayowa-bg: #3a2a12;
+  --both: #aab6d2; --both-bg: #232d47; --ok: #4fd093; --ok-bg: #12352a;
+  --alert: #ff8080; --alert-bg: #3d1c21; --soon-bg: #1b2a57;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.45 var(--font-body);
+  padding-block: 0 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--bg); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; border-radius: 8px; }
+svg { display: block; }
+.wrap { max-width: 1080px; margin: 0 auto; }
+
+/* Header */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); padding-block: 12px 10px; display: grid; gap: 10px; }
+.bar { display: flex; align-items: center; gap: 10px; }
+.brand { font: 700 24px/1 var(--font-display); letter-spacing: -.02em; display: flex; align-items: baseline; gap: 8px; margin-right: auto; }
+.brand small { font: 500 12px var(--font-body); color: var(--muted); letter-spacing: 0; }
+.live { display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--font-mono); color: var(--muted); padding: 5px 9px; border-radius: 99px; background: var(--surface-2); }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
+.live[data-s="live"] i { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
+.live[data-s="offline"] i, .live[data-s="readonly"] i { background: var(--alert); }
+.icon-btn { position: relative; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; }
+.icon-btn .badge { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--alert); color: #fff; font: 600 11px/18px var(--font-body); text-align: center; }
+
+.strip { display: grid; grid-template-columns: auto repeat(7, minmax(0, 1fr)) auto; gap: 6px; align-items: stretch; }
+.step { width: 30px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; }
+.day { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 7px 0 8px; display: grid; gap: 1px; justify-items: center; min-width: 0; }
+.day .dn { font: 500 11px var(--font-body); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.day .dd { font: 600 17px/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.day .pg { width: 70%; height: 4px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-top: 4px; }
+.day .pg b { display: block; height: 100%; background: var(--ok); width: 0; }
+.day[aria-current="date"] .dd { color: var(--brand); }
+.day[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.day[aria-pressed="true"] .dn { color: inherit; opacity: .75; }
+.day[aria-pressed="true"] .dd { color: inherit; }
+.day[aria-pressed="true"] .pg { background: rgba(255, 255, 255, .25); }
+
+.seg { display: inline-flex; padding: 3px; border-radius: 12px; background: var(--surface-2); gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 7px 14px; border-radius: 9px; font-weight: 500; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.filters { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tabs { display: none; }
+.tabs button { flex: 1; }
+
+/* Layout */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; padding-top: 12px; }
+@media (min-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr) 340px; }
+  aside { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 150px); align-self: start; max-height: calc(100vh - 170px); overflow: auto; }
+}
+@media (max-width: 899px) {
+  .tabs { display: inline-flex; width: 100%; }
+  [data-view="day"] aside { display: none; }
+  [data-view="feed"] main { display: none; }
+}
+@media (max-width: 520px) {
+  .strip { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .step { display: none; }
+  .brand small { display: none; }
+}
+
+/* Day */
+.dayhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dayhead h1 { font: 700 30px/1.05 var(--font-display); letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+.dayhead p { margin: 4px 0 0; color: var(--muted); }
+.today-tag { font: 500 12px var(--font-mono); background: var(--brand); color: var(--brand-ink); border-radius: 6px; padding: 2px 7px; margin-left: 8px; vertical-align: middle; letter-spacing: .04em; }
+.btn { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 11px; padding: 9px 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--muted); padding: 7px 10px; font-weight: 500; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.meter { height: 6px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin: 14px 0 4px; }
+.meter b { display: block; height: 100%; background: var(--ok); transition: width .3s; }
+.sub { font: 500 12px var(--font-mono); color: var(--muted); }
+
+.sec { margin-top: 22px; display: grid; gap: 10px; }
+.sec h2 { margin: 0; font: 600 12px var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 10px; }
+.sec h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+.card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 13px 14px; box-shadow: var(--shadow); }
+.card.is-done { background: transparent; box-shadow: none; }
+.card.is-done h3 { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+.card.s-overdue { border-color: var(--alert); }
+.card.s-soon { border-color: var(--brand); }
+.tick { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--line-strong); background: transparent; display: grid; place-items: center; color: transparent; transition: background .15s, border-color .15s; }
+.tick:hover:not([disabled]) { border-color: var(--ok); }
+.tick[aria-pressed="true"] { background: var(--ok); border-color: var(--ok); color: #fff; }
+.tick[disabled] { cursor: default; }
+.meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.chip { font: 600 12px var(--font-body); padding: 2px 9px; border-radius: 99px; }
+.chip.nibi { background: var(--nibi-bg); color: var(--nibi); }
+.chip.mayowa { background: var(--mayowa-bg); color: var(--mayowa); }
+.chip.both { background: var(--both-bg); color: var(--both); }
+.when { font: 500 13px var(--font-mono); color: var(--muted); }
+.tag { font: 600 11px var(--font-body); text-transform: uppercase; letter-spacing: .08em; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); color: var(--muted); }
+.tag.soon { background: var(--soon-bg); color: var(--brand); }
+.tag.overdue { background: var(--alert-bg); color: var(--alert); }
+.card h3 { margin: 4px 0 0; font: 600 18px/1.25 var(--font-display); text-wrap: balance; }
+.detail { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
+.doneby { margin: 6px 0 0; font-size: 13px; color: var(--ok); font-weight: 500; }
+.acts { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+.acts .btn { padding: 6px 10px; font-size: 13px; font-weight: 500; }
+
+.thread { display: grid; gap: 10px; margin-top: 10px; }
+.msg { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 9px; }
+.av { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); color: var(--ink); font: 600 12px/28px var(--font-body); text-align: center; }
+.msg .who { font-size: 13px; font-weight: 600; }
+.msg .who span { font: 400 12px var(--font-mono); color: var(--muted); margin-left: 6px; }
+.msg p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.photo { margin-top: 6px; display: block; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface-2); max-width: 260px; }
+.photo img { width: 100%; height: auto; max-height: 220px; object-fit: cover; }
+.mini { border: 0; background: none; color: var(--muted); font-size: 12px; padding: 0; margin-left: 8px; text-decoration: underline; }
+
+.composer { margin-top: 10px; display: grid; gap: 8px; padding: 10px; border-radius: 12px; background: var(--surface-2); }
+.composer textarea, .field input, .field select, .field textarea { width: 100%; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; padding: 9px 11px; }
+.composer textarea { min-height: 64px; resize: vertical; }
+.crow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.crow .grow { flex: 1; }
+.thumb { position: relative; width: 64px; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.chk { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; }
+.chk input { width: 18px; height: 18px; accent-color: var(--ok); }
+
+/* Callouts */
+.callouts { display: grid; gap: 10px; }
+.attn { border: 1px solid var(--line); background: var(--surface); border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow); }
+.attn h2 { margin: 0 0 8px; font: 600 15px var(--font-display); display: flex; align-items: center; gap: 8px; }
+.attn ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.attn li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.attn li .t { flex: 1; min-width: 160px; font-weight: 500; }
+.keys { display: flex; gap: 8px; flex-wrap: wrap; }
+.key { border: 1px dashed var(--line-strong); background: transparent; border-radius: 12px; padding: 8px 12px; text-align: left; display: grid; gap: 1px; }
+.key b { font: 600 14px var(--font-display); }
+.key span { font-size: 12px; color: var(--muted); }
+.banner { background: var(--alert-bg); color: var(--alert); border-radius: 12px; padding: 10px 14px; font-weight: 500; }
+
+/* Feed */
+aside h2 { margin: 0 0 10px; font: 700 18px var(--font-display); display: flex; justify-content: space-between; align-items: baseline; }
+.feed { display: grid; gap: 14px; }
+.ev { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 9px; font-size: 14px; }
+.ev .line { overflow-wrap: anywhere; }
+.ev .line button { border: 0; background: none; padding: 0; font-weight: 600; text-align: left; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.ev time { display: block; font: 400 12px var(--font-mono); color: var(--muted); margin-top: 1px; }
+.ev blockquote { margin: 4px 0 0; padding-left: 10px; border-left: 2px solid var(--line-strong); color: var(--muted); white-space: pre-wrap; }
+.empty { color: var(--muted); border: 1px dashed var(--line-strong); border-radius: 12px; padding: 16px; }
+
+/* Overlays */
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(8, 12, 24, .55); display: grid; align-items: end; justify-items: center; padding: 0; }
+.scrim[hidden] { display: none; }
+.sheet { width: min(480px, 100%); background: var(--surface); border-radius: 18px 18px 0 0; padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 12px; max-height: 90vh; overflow: auto; }
+@media (min-width: 620px) { .scrim { align-items: center; } .sheet { border-radius: 18px; } }
+.sheet h2 { margin: 0; font: 700 20px var(--font-display); }
+.field { display: grid; gap: 5px; font-size: 14px; font-weight: 500; }
+.field.two { grid-template-columns: 1fr 1fr; gap: 10px; }
+.field.two > label { display: grid; gap: 5px; }
+.lb { place-items: center; padding: 16px; }
+.lb img { max-width: 100%; max-height: 86vh; border-radius: 12px; }
+.toasts { position: fixed; z-index: 50; left: 0; right: 0; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; justify-items: center; pointer-events: none; padding-inline: 16px; }
+.toast { pointer-events: auto; background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 12px; box-shadow: var(--shadow); max-width: 440px; font-weight: 500; animation: rise .2s ease-out; }
+@keyframes rise { from { transform: translateY(8px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } .meter b { transition: none; } }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+
+<div class="wrap" id="app" data-view="day">
+  <header class="top">
+    <div class="bar">
+      <div class="brand">OTOS <small>On top of it</small></div>
+      <span class="live" id="live" data-s="connecting"><i></i><span id="live-t">Connecting</span></span>
+      <button class="icon-btn" id="bell" data-act="bell" aria-label="Alerts" aria-haspopup="dialog"></button>
+    </div>
+    <nav class="strip" id="strip" aria-label="Week"></nav>
+    <div class="filters">
+      <div class="seg" id="filter" role="group" aria-label="Show tasks for"></div>
+      <div class="seg tabs" id="tabs" role="group" aria-label="View"></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main>
+      <div class="callouts" id="callouts"></div>
+      <div id="day"></div>
+    </main>
+    <aside aria-label="Live updates"><div id="feed"></div></aside>
+  </div>
+</div>
+
+<!-- Alerts panel -->
+<div class="scrim" id="bell-panel" hidden>
+  <div class="sheet" role="dialog" aria-label="Alerts">
+    <h2>Alerts</h2>
+    <p class="sub" id="notif-state" style="margin:0"></p>
+    <div class="field"><label for="lead">Remind me before an appointment</label>
+      <select id="lead"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select>
+    </div>
+    <p style="margin:0;color:var(--muted)">Morning items alert at 7:00am. Night-before items alert at 7:30pm. Alerts show here while the page is open. System notifications work where the browser allows them.</p>
+    <div class="crow"><button class="btn primary" data-act="enable-notif" id="enable-notif">Turn on notifications</button><button class="btn quiet grow" data-act="close-overlay">Close</button></div>
+  </div>
+</div>
+
+<!-- Add task -->
+<div class="scrim" id="task-panel" hidden>
+  <form class="sheet" id="task-form" aria-label="Add a task">
+    <h2>Add a task</h2>
+    <div class="field"><label for="nt-title">What needs to happen?</label><input id="nt-title" required maxlength="120" placeholder="Bring library books"></div>
+    <div class="field two">
+      <label for="nt-child">For<select id="nt-child"><option>Both</option><option>Nibi</option><option>Mayowa</option></select></label>
+      <label for="nt-time">Time (optional)<input id="nt-time" type="time"></label>
+    </div>
+    <div class="field"><label for="nt-repeat">How often</label><select id="nt-repeat"></select></div>
+    <div class="field"><label for="nt-detail">Details (optional)</label><textarea id="nt-detail" rows="2" maxlength="300"></textarea></div>
+    <div class="crow"><button class="btn primary" type="submit" id="nt-save">Add task</button><button class="btn quiet" type="button" data-act="close-overlay">Cancel</button></div>
+  </form>
+</div>
+
+<div class="scrim lb" id="lightbox" hidden data-act="close-overlay"><img id="lb-img" alt="Uploaded photo"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+  "use strict";
+  /* ---------- helpers ---------- */
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const pad = (n) => String(n).padStart(2, "0");
+  const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return iso(d); };
+  const mins = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const DOW_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const MON_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const fmtT = (t) => { const [h, m] = t.split(":").map(Number); return `${h % 12 || 12}:${pad(m)} ${h < 12 ? "AM" : "PM"}`; };
+  const fmtDate = (s) => { const d = parse(s); return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`; };
+  const ago = (ms) => {
+    const diff = Date.now() - ms;
+    if (diff < 60000) return "just now";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    const d = new Date(ms), t = new Date(); const tm = fmtT(`${d.getHours()}:${d.getMinutes()}`);
+    return iso(d) === iso(t) ? tm : `${DOW[d.getDay()]} ${tm}`;
+  };
+  const store = {
+    get(k, f) { try { const v = localStorage.getItem(k); return v === null ? f : v; } catch { return f; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  const ICON = {
+    check: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    bell: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7.5 2 7.5H4S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>',
+    plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+    cam: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+    chat: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+    left: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
+    right: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+  };
+
+  /* ---------- the weekly plan ---------- */
+  // kind: wear | pack | appt | pickup | wash | read | task.   slot: morning | evening | bedtime | anytime (used when no exact time)
+  const SLOT = { morning: { min: 420, label: "Morning" }, evening: { min: 1080, label: "Evening" }, bedtime: { min: 1170, label: "Before bed" }, anytime: { min: 540, label: "Anytime" } };
+  const BASE = [];
+  const add = (o) => BASE.push(o);
+  // Monday
+  add({ id: "mon-may-kit", dows: [1], child: "Mayowa", kind: "wear", slot: "morning", prep: true, title: "Wear Mavericks kit to school" });
+  add({ id: "mon-may-pack", dows: [1], child: "Mayowa", kind: "pack", slot: "morning", prep: true, title: "Pack school uniform in his bag" });
+  add({ id: "mon-nib-uni", dows: [1], child: "Nibi", kind: "wear", slot: "morning", title: "Wear school uniform" });
+  add({ id: "mon-may-dan", dows: [1], child: "Mayowa", kind: "appt", time: "15:40", title: "Mr Daniel", detail: "Mayowa only." });
+  add({ id: "mon-sofa", dows: [1], child: "Both", kind: "appt", time: "16:40", end: "17:50", title: "SOFA" });
+  // Tuesday
+  add({ id: "tue-nib-pe", dows: [2], child: "Nibi", kind: "wear", slot: "morning", prep: true, title: "Wear PE uniform and the blue hair band" });
+  add({ id: "tue-nib-dan", dows: [2], child: "Nibi", kind: "appt", time: "16:40", title: "Mr Daniel", detail: "Nibi only." });
+  add({ id: "tue-may-pick", dows: [2], child: "Mayowa", kind: "pickup", time: "16:30", title: "Pick up Mayowa from school", detail: "Home match: 4:30pm. Away match: 5:00pm." });
+  add({ id: "tue-wash-kit", dows: [2], child: "Mayowa", kind: "wash", slot: "evening", title: "Wash the Mavericks kit" });
+  add({ id: "tue-wash-pe", dows: [2], child: "Nibi", kind: "wash", slot: "evening", title: "Wash Nibi's PE uniform" });
+  // Wednesday
+  add({ id: "wed-nib-uni", dows: [3], child: "Nibi", kind: "wear", slot: "morning", title: "Wear regular uniform" });
+  add({ id: "wed-may-pe", dows: [3], child: "Mayowa", kind: "wear", slot: "morning", title: "Wear PE uniform" });
+  add({ id: "wed-sofa", dows: [3], child: "Both", kind: "appt", time: "16:40", title: "SOFA with Una" });
+  // Thursday
+  add({ id: "thu-may-kit", dows: [4], child: "Mayowa", kind: "wear", slot: "morning", prep: true, title: "Wear the complete Mavericks kit with blue socks" });
+  add({ id: "thu-may-pack", dows: [4], child: "Mayowa", kind: "pack", slot: "morning", prep: true, title: "Pack school uniform in his bag" });
+  add({ id: "thu-nib-pe", dows: [4], child: "Nibi", kind: "wear", slot: "morning", title: "Wear PE uniform" });
+  // Friday
+  add({ id: "fri-nib-uni", dows: [5], child: "Nibi", kind: "wear", slot: "morning", title: "Wear normal uniform" });
+  add({ id: "fri-may-pe", dows: [5], child: "Mayowa", kind: "wear", slot: "morning", title: "Wear PE uniform" });
+  add({ id: "fri-dan-1", dows: [5], child: "Both", kind: "appt", time: "12:30", end: "13:30", title: "Mr Daniel" });
+  add({ id: "fri-dan-2", dows: [5], child: "Both", kind: "appt", time: "13:30", end: "14:30", title: "Mr Daniel" });
+  // Reading, Mon to Thu
+  add({ id: "read-bed", dows: [1, 2, 3, 4], child: "Both", kind: "read", slot: "bedtime", title: "Read for 30 minutes before bed" });
+  // Weekend
+  add({ id: "wk-read", dows: [6, 0], child: "Both", kind: "read", slot: "anytime", title: "30 minutes of quiet reading" });
+  add({ id: "wk-teams", dows: [6, 0], child: "Both", kind: "task", slot: "anytime", title: "Check Teams", detail: "Homework, practice work and reading assignments." });
+  add({ id: "wk-century", dows: [6, 0], child: "Both", kind: "task", slot: "anytime", title: "Century Wise" });
+  add({ id: "wk-sparks", dows: [6, 0], child: "Both", kind: "task", slot: "anytime", title: "Sparks" });
+  // Key dates
+  add({ id: "kd-may-pic", date: "2026-11-12", child: "Mayowa", kind: "task", slot: "morning", prep: true, key: true, title: "Picture day", detail: "Pack full uniform, tie and hair brush. Thursday is also a Mavericks kit day, so confirm whether he wears the kit and changes for the photo." });
+  add({ id: "kd-nib-pic", date: "2026-11-18", child: "Nibi", kind: "task", slot: "morning", prep: true, key: true, title: "Picture day", detail: "Dress in full uniform and hat." });
+
+  /* ---------- state ---------- */
+  const today0 = iso(new Date());
+  const S = {
+    sel: today0, filter: "All", view: "day",
+    done: new Map(), notes: [], tasks: [], names: new Map(),
+    me: null, canWrite: true, db: null, assets: null, userCap: null,
+    live: "connecting", ready: { done: false, notes: false, tasks: false },
+    lead: Number(store.get("otos-lead", "30")) || 30,
+    open: new Set(), drafts: {}, pending: {}, busy: new Set(),
+    alerts: [], alertState: new Map(),
+  };
+
+  function enrich(it, date) {
+    const slot = SLOT[it.slot || "anytime"];
+    const min = it.time ? mins(it.time) : slot.min;
+    const label = it.time ? (it.end ? `${fmtT(it.time)} to ${fmtT(it.end)}` : fmtT(it.time)) : slot.label;
+    return { ...it, date, key: `${date}_${it.id}`, min, label };
+  }
+  function itemsFor(date) {
+    const dow = parse(date).getDay();
+    const out = [];
+    for (const it of BASE) if (it.date ? it.date === date : it.dows.includes(dow)) out.push(enrich(it, date));
+    for (const t of S.tasks) if (t.date ? t.date === date : (t.dows || []).includes(dow)) out.push(enrich({ ...t, id: "t-" + t.id, custom: true, slot: "anytime", kind: "task" }, date));
+    return out.sort((a, b) => a.min - b.min || a.child.localeCompare(b.child));
+  }
+  const vis = (it) => S.filter === "All" || it.child === S.filter || it.child === "Both";
+  const isDone = (key) => S.done.get(key)?.done === true;
+  const itemByKey = (key) => itemsFor(key.slice(0, 10)).find((i) => i.key === key);
+  const who = (id) => (id && id === S.me ? "You" : S.names.get(id) || "Someone");
+  const initial = (id) => (who(id) === "You" ? "Y" : (who(id)[0] || "?").toUpperCase());
+  const chip = (c) => `<span class="chip ${c.toLowerCase()}">${esc(c)}</span>`;
+
+  /* ---------- rendering ---------- */
+  function renderHead() {
+    $("#bell").innerHTML = ICON.bell + (S.alerts.length ? `<span class="badge">${S.alerts.length}</span>` : "");
+    const wk = addDays(S.sel, -((parse(S.sel).getDay() + 6) % 7));
+    let h = `<button class="step" data-act="week" data-n="-7" aria-label="Previous week">${ICON.left}</button>`;
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(wk, i);
+      const items = itemsFor(d).filter(vis);
+      const n = items.length, k = items.filter((x) => isDone(x.key)).length;
+      const pct = n ? Math.round((k / n) * 100) : 0;
+      h += `<button class="day" data-act="sel" data-date="${d}" aria-pressed="${d === S.sel}" ${d === today0 ? 'aria-current="date"' : ""} aria-label="${esc(fmtDate(d))}, ${k} of ${n} done">
+        <span class="dn">${DOW[parse(d).getDay()]}</span><span class="dd">${parse(d).getDate()}</span><span class="pg"><b style="width:${pct}%"></b></span></button>`;
+    }
+    h += `<button class="step" data-act="week" data-n="7" aria-label="Next week">${ICON.right}</button>`;
+    $("#strip").innerHTML = h;
+    $("#filter").innerHTML = ["All", "Nibi", "Mayowa"].map((f) => `<button data-act="filter" data-f="${f}" aria-pressed="${S.filter === f}">${f === "All" ? "Everyone" : f}</button>`).join("");
+    $("#tabs").innerHTML = [["day", "Checklist"], ["feed", "Live updates"]].map(([v, l]) => `<button data-act="tab" data-v="${v}" aria-pressed="${S.view === v}">${l}</button>`).join("");
+    $("#app").dataset.view = S.view;
+    const t = { connecting: "Connecting", live: "Live", offline: "Offline", readonly: "View only" }[S.live];
+    $("#live").dataset.s = S.live; $("#live-t").textContent = t;
+  }
+
+  function cardHTML(it, opts = {}) {
+    const done = isDone(it.key), rec = S.done.get(it.key);
+    const st = !done ? S.alertState.get(it.key) : null;
+    const notes = S.notes.filter((n) => n.k === it.key).sort((a, b) => a.at - b.at);
+    const open = S.open.has(it.key);
+    const dr = S.drafts[it.key] || {};
+    const pend = S.pending[it.key];
+    const markDone = dr.markDone ?? !done;
+    const tag = opts.tomorrow ? `<span class="tag">Night before</span>` : st ? `<span class="tag ${st}">${st === "overdue" ? "Overdue" : "Due soon"}</span>` : "";
+    const cannot = !S.canWrite || !S.db;
+    let h = `<article class="card ${done ? "is-done" : ""} ${st ? "s-" + st : ""}" id="c-${esc(it.key)}">
+      <button class="tick" data-act="toggle" data-key="${esc(it.key)}" aria-pressed="${done}" aria-label="${done ? "Mark not done" : "Mark done"}: ${esc(it.title)}" ${cannot ? "disabled" : ""}>${ICON.check}</button>
+      <div>
+        <div class="meta">${chip(it.child)}<span class="when">${esc(opts.tomorrow ? "Tonight, for " + fmtDate(it.date) : it.label)}</span>${tag}</div>
+        <h3>${esc(it.title)}</h3>
+        ${it.detail ? `<p class="detail">${esc(it.detail)}</p>` : ""}
+        ${done && rec ? `<p class="doneby">Done by ${esc(who(rec.by))} at ${esc(ago(rec.at))}</p>` : ""}`;
+    if (notes.length) {
+      h += `<div class="thread">` + notes.map((n) => `<div class="msg"><div class="av" aria-hidden="true">${esc(initial(n.by))}</div><div>
+        <div class="who">${esc(who(n.by))}<span>${esc(ago(n.at))}</span>${n.by === S.me && S.canWrite ? `<button class="mini" data-act="delnote" data-id="${esc(n.id)}">Delete</button>` : ""}</div>
+        ${n.text ? `<p>${esc(n.text)}</p>` : ""}
+        ${n.photo ? `<button class="photo" data-act="lightbox" data-url="${esc(n.photo.url)}" aria-label="Open photo"><img src="${esc(n.photo.url)}" alt="Photo from ${esc(who(n.by))}" loading="lazy"></button>` : ""}
+      </div></div>`).join("") + `</div>`;
+    }
+    if (!cannot) {
+      if (open) {
+        h += `<div class="composer">
+          <textarea id="tx-${esc(it.key)}" data-draft="${esc(it.key)}" placeholder="Add a comment (optional)" aria-label="Comment">${esc(dr.text || "")}</textarea>
+          <div class="crow">
+            ${S.assets ? `<button class="btn" type="button" data-act="photo" data-key="${esc(it.key)}">${ICON.cam} ${pend ? "Change photo" : "Add photo"}</button>
+              <input class="sr" type="file" accept="image/*" id="fi-${esc(it.key)}" data-file="${esc(it.key)}" tabindex="-1">` : `<span class="sub">Photos need Contributor access.</span>`}
+            ${pend ? `<span class="thumb"><img src="${esc(pend.url)}" alt="Selected photo"></span>` : ""}
+          </div>
+          <div class="crow">
+            <label class="chk"><input type="checkbox" data-markdone="${esc(it.key)}" ${markDone ? "checked" : ""} ${done ? "disabled" : ""}> ${done ? "Already done" : "Mark as done"}</label>
+            <span class="grow"></span>
+            <button class="btn quiet" data-act="compose" data-key="${esc(it.key)}">Cancel</button>
+            <button class="btn primary" data-act="post" data-key="${esc(it.key)}" ${S.busy.has(it.key) ? "disabled" : ""}>${S.busy.has(it.key) ? "Posting" : "Post update"}</button>
+          </div></div>`;
+      } else {
+        h += `<div class="acts"><button class="btn quiet" data-act="compose" data-key="${esc(it.key)}">${ICON.chat} Comment or photo</button>
+          ${it.custom ? `<button class="btn quiet" data-act="deltask" data-id="${esc(it.id.slice(2))}">Remove task</button>` : ""}</div>`;
+      }
+    }
+    return h + `</div></article>`;
+  }
+
+  function renderDay() {
+    const d = parse(S.sel), items = itemsFor(S.sel).filter(vis);
+    const k = items.filter((i) => isDone(i.key)).length;
+    const groups = [["Morning", items.filter((i) => i.min < 720)], ["Afternoon", items.filter((i) => i.min >= 720 && i.min < 1080)], ["Evening", items.filter((i) => i.min >= 1080)]];
+    let h = `<div class="dayhead"><div><h1>${DOW_LONG[d.getDay()]}${S.sel === today0 ? '<span class="today-tag">TODAY</span>' : ""}</h1>
+      <p>${d.getDate()} ${MON_LONG[d.getMonth()]} ${d.getFullYear()}</p></div>
+      <button class="btn" data-act="addtask" ${!S.canWrite || !S.db ? "disabled" : ""}>${ICON.plus} Add task</button></div>
+      <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="${items.length}" aria-valuenow="${k}"><b style="width:${items.length ? (k / items.length) * 100 : 0}%"></b></div>
+      <div class="sub">${k} of ${items.length} done</div>`;
+    for (const [name, list] of groups) if (list.length) h += `<section class="sec"><h2>${name}</h2>${list.map((i) => cardHTML(i)).join("")}</section>`;
+    if (!items.length) h += `<div class="empty" style="margin-top:22px">Nothing planned for this day. Use Add task to put something on it.</div>`;
+    const prep = itemsFor(addDays(S.sel, 1)).filter((i) => i.prep && vis(i));
+    if (prep.length) h += `<section class="sec"><h2>Get ready for tomorrow</h2>${prep.map((i) => cardHTML(i, { tomorrow: true })).join("")}</section>`;
+    $("#day").innerHTML = h;
+  }
+
+  function renderCallouts() {
+    let h = "";
+    if (!S.db) h += `<div class="banner">Live sync is not available in this view, so ticks and photos can't be saved. Open the page from your claude.ai link.</div>`;
+    else if (!S.canWrite) h += `<div class="banner">You have view-only access. Ask the owner for Contributor access to tick items and post photos.</div>`;
+    if (S.alerts.length) {
+      h += `<div class="attn"><h2>Needs attention now</h2><ul>` + S.alerts.map((a) => `<li>${chip(a.child)}<span class="t">${esc(a.title)}</span>
+        <span class="tag ${a.state}">${a.state === "overdue" ? "Overdue" : a.tonight ? "Tonight" : "Due " + esc(a.label)}</span>
+        <button class="btn" style="padding:5px 10px" data-act="sel" data-date="${today0}">Open</button></li>`).join("") + `</ul></div>`;
+    }
+    const keys = BASE.filter((b) => b.key && b.date >= today0 && (S.filter === "All" || b.child === S.filter));
+    if (keys.length) h += `<div class="keys" aria-label="Key dates">` + keys.map((b) => {
+      const n = Math.round((parse(b.date) - parse(today0)) / 86400000);
+      return `<button class="key" data-act="sel" data-date="${b.date}"><b>${esc(b.title)}: ${esc(b.child)}</b><span>${esc(fmtDate(b.date))} · ${n === 0 ? "today" : n === 1 ? "tomorrow" : "in " + n + " days"}</span></button>`;
+    }).join("") + `</div>`;
+    $("#callouts").innerHTML = h;
+  }
+
+  function renderFeed() {
+    const ev = [];
+    for (const [k, v] of S.done) if (v.done) ev.push({ t: "done", at: v.at, by: v.by, key: k });
+    for (const n of S.notes) ev.push({ t: "note", ...n, key: n.k });
+    ev.sort((a, b) => b.at - a.at);
+    const rows = ev.map((e) => ({ e, it: itemByKey(e.key) })).filter((r) => !r.it || vis(r.it)).slice(0, 40);
+    let h = `<h2>Live updates <span class="sub">${rows.length ? "newest first" : ""}</span></h2>`;
+    if (!rows.length) h += `<div class="empty">Nothing yet. When anyone ticks off a task or posts a photo, it shows up here straight away.</div>`;
+    else h += `<div class="feed">` + rows.map(({ e, it }) => {
+      const title = it ? it.title : "a task", date = e.key.slice(0, 10);
+      const link = `<button data-act="sel" data-date="${date}">${esc(title)}</button>`;
+      return `<div class="ev"><div class="av" aria-hidden="true">${esc(initial(e.by))}</div><div class="line">
+        <b>${esc(who(e.by))}</b> ${e.t === "done" ? "marked" : "commented on"} ${link}${e.t === "done" ? " done" : ""}${it ? ` <span class="sub">(${esc(it.child)}, ${esc(fmtDate(date))})</span>` : ""}
+        ${e.text ? `<blockquote>${esc(e.text)}</blockquote>` : ""}
+        ${e.photo ? `<button class="photo" data-act="lightbox" data-url="${esc(e.photo.url)}" aria-label="Open photo"><img src="${esc(e.photo.url)}" alt="Photo" loading="lazy"></button>` : ""}
+        <time>${esc(ago(e.at))}</time></div></div>`;
+    }).join("") + `</div>`;
+    $("#feed").innerHTML = h;
+  }
+
+  function render() {
+    const a = document.activeElement, id = a && a.id, s = a && a.selectionStart, e = a && a.selectionEnd;
+    renderHead(); renderCallouts(); renderDay(); renderFeed();
+    if (id) { const el = document.getElementById(id); if (el && el !== document.activeElement) { el.focus(); try { el.setSelectionRange(s, e); } catch {} } }
+  }
+
+  /* ---------- alerts ---------- */
+  function toast(msg) {
+    const el = document.createElement("div"); el.className = "toast"; el.textContent = msg;
+    $("#toasts").appendChild(el); setTimeout(() => el.remove(), 5000);
+  }
+  function notify(title, body) {
+    try { if ("Notification" in window && Notification.permission === "granted") new Notification(title, { body }); } catch {}
+  }
+  function computeAlerts() {
+    const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes(), t = iso(now);
+    const out = [], st = new Map();
+    for (const it of itemsFor(t)) {
+      if (isDone(it.key) || !vis(it)) continue;
+      const exact = !!it.time;
+      const lead = exact ? S.lead : 0;
+      if (nowMin >= it.min - lead) {
+        const state = nowMin <= it.min ? "soon" : "overdue";
+        out.push({ ...it, state }); st.set(it.key, state);
+      }
+    }
+    if (nowMin >= 19 * 60 + 30) {
+      for (const it of itemsFor(addDays(t, 1))) {
+        if (!it.prep || isDone(it.key) || !vis(it)) continue;
+        out.push({ ...it, state: "soon", tonight: true }); st.set(it.key, "soon");
+      }
+    }
+    return { out, st };
+  }
+  function tick(first) {
+    const { out, st } = computeAlerts();
+    S.alertState = st;
+    const fired = new Set((store.get("otos-fired", "") || "").split("|").filter(Boolean));
+    let fresh = 0;
+    for (const a of out) {
+      const id = a.key + (a.state === "overdue" ? "!" : "");
+      if (!fired.has(id) && !first) { fired.add(id); fresh++; toast(`${a.state === "overdue" ? "Overdue" : a.tonight ? "Tonight" : "Coming up"}: ${a.title} (${a.child})`); notify(`${a.child}: ${a.title}`, a.state === "overdue" ? "This is overdue." : a.label); }
+      else if (first) fired.add(id);
+    }
+    store.set("otos-fired", [...fired].slice(-200).join("|"));
+    S.alerts = out;
+    render();
+  }
+
+  /* ---------- data ---------- */
+  async function ensureNames(ids) {
+    if (!S.userCap?.profiles) return;
+    const need = [...new Set(ids.filter((i) => i && i !== S.me && !S.names.has(i)))];
+    if (!need.length) return;
+    try { const ps = await S.userCap.profiles(need); for (const i of need) { const n = ps?.[i]?.name; if (n) S.names.set(i, n); } render(); } catch {}
+  }
+  function setLive(v) { if (S.live !== v) { S.live = v; renderHead(); } }
+  function markReady(which, snap) {
+    if (!snap.metadata.fromCache) { S.ready[which] = true; if (S.ready.done && S.ready.notes && S.ready.tasks && S.live !== "readonly") setLive("live"); }
+  }
+  function subscribe() {
+    const since = addDays(today0, -21);
+    const err = () => setLive("offline");
+    S.db.collection("done").where("d", ">=", since).onSnapshot((snap) => {
+      const was = S.ready.done;
+      if (was) for (const c of snap.docChanges()) {
+        const v = c.doc.data();
+        if (c.type !== "removed" && v && v.by !== S.me && !c.doc.metadata.hasPendingWrites && v.done) {
+          const it = itemByKey(v.k); toast(`${who(v.by)} marked "${it ? it.title : "a task"}" done${it ? " for " + it.child : ""}`);
+          notify("OTOS", `${who(v.by)} marked ${it ? it.title : "a task"} done`);
+        }
+      }
+      S.done = new Map(snap.docs.map((d) => [d.id, d.data()]));
+      markReady("done", snap); ensureNames([...S.done.values()].map((v) => v.by)); tick(false);
+    }, err);
+    S.db.collection("notes").where("d", ">=", since).onSnapshot((snap) => {
+      if (S.ready.notes) for (const c of snap.docChanges()) {
+        const v = c.doc.data();
+        if (c.type === "added" && v.by !== S.me && !c.doc.metadata.hasPendingWrites) {
+          const it = itemByKey(v.k); toast(`${who(v.by)} ${v.photo ? "sent a photo" : "commented"} on "${it ? it.title : "a task"}"`);
+          notify("OTOS", `${who(v.by)} updated ${it ? it.title : "a task"}`);
+        }
+      }
+      S.notes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      markReady("notes", snap); ensureNames(S.notes.map((n) => n.by)); render();
+    }, err);
+    S.db.collection("tasks").onSnapshot((snap) => {
+      S.tasks = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      markReady("tasks", snap); render();
+    }, err);
+    setTimeout(() => { if (S.live === "connecting") setLive("offline"); }, 10000);
+  }
+
+  async function setDone(key, val) {
+    try { await S.db.doc("done/" + key).set({ k: key, d: key.slice(0, 10), done: val, by: S.me || "guest", at: Date.now() }); }
+    catch { toast("Couldn't save that. Check your connection and try again."); }
+  }
+  async function shrink(file) {
+    try {
+      const bmp = await createImageBitmap(file), max = 1600, sc = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas"); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc);
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      return await new Promise((res) => c.toBlob((b) => res(b || file), "image/jpeg", 0.82));
+    } catch { return file; }
+  }
+  async function post(key) {
+    const dr = S.drafts[key] || {}, text = (dr.text || "").trim(), pend = S.pending[key];
+    const wantDone = (dr.markDone ?? !isDone(key)) && !isDone(key);
+    if (!text && !pend && !wantDone) { toast("Add a comment or photo first."); return; }
+    S.busy.add(key); render();
+    try {
+      let photo = null;
+      if (pend) { const r = await S.assets.upload(pend.blob); photo = { id: r.id, url: r.url }; }
+      if (text || photo) await S.db.collection("notes").add({ k: key, d: key.slice(0, 10), text, by: S.me || "guest", at: Date.now(), photo });
+      if (wantDone) await setDone(key, true);
+      if (pend) URL.revokeObjectURL(pend.url);
+      delete S.pending[key]; delete S.drafts[key]; S.open.delete(key);
+      toast("Update sent to everyone.");
+    } catch (e) { toast(e?.code === "quota_exceeded" ? "Storage is full. Remove some old photos." : "Couldn't send that. Try again."); }
+    S.busy.delete(key); render();
+  }
+
+  /* ---------- events ---------- */
+  function closeOverlays() { for (const id of ["bell-panel", "task-panel", "lightbox"]) $("#" + id).hidden = true; }
+  function notifLine() {
+    const el = $("#notif-state"), b = $("#enable-notif");
+    if (!("Notification" in window)) { el.textContent = "System notifications are not available in this view. On-screen alerts still work."; b.hidden = true; return; }
+    const p = Notification.permission;
+    el.textContent = p === "granted" ? "System notifications are on." : p === "denied" ? "System notifications are blocked in your browser settings." : "System notifications are off.";
+    b.hidden = p !== "default";
+  }
+
+  document.addEventListener("click", async (ev) => {
+    const el = ev.target.closest("[data-act]"); if (!el) return;
+    if (el.id === "lightbox" && ev.target.id === "lb-img") return;
+    const a = el.dataset.act, key = el.dataset.key;
+    if (a === "sel") { S.sel = el.dataset.date; S.view = "day"; closeOverlays(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    else if (a === "week") { S.sel = addDays(S.sel, Number(el.dataset.n)); render(); }
+    else if (a === "filter") { S.filter = el.dataset.f; tick(true); }
+    else if (a === "tab") { S.view = el.dataset.v; render(); }
+    else if (a === "toggle") { await setDone(key, !isDone(key)); }
+    else if (a === "compose") { S.open.has(key) ? S.open.delete(key) : S.open.add(key); render(); if (S.open.has(key)) document.getElementById("tx-" + key)?.focus(); }
+    else if (a === "photo") { document.getElementById("fi-" + key)?.click(); }
+    else if (a === "post") { post(key); }
+    else if (a === "delnote") { try { await S.db.doc("notes/" + el.dataset.id).delete(); } catch { toast("Couldn't delete that."); } }
+    else if (a === "deltask") { try { await S.db.doc("tasks/" + el.dataset.id).delete(); } catch { toast("Couldn't remove that."); } }
+    else if (a === "lightbox") { $("#lb-img").src = el.dataset.url; $("#lightbox").hidden = false; }
+    else if (a === "bell") { notifLine(); $("#lead").value = String(S.lead); $("#bell-panel").hidden = false; }
+    else if (a === "enable-notif") { try { await Notification.requestPermission(); } catch {} notifLine(); }
+    else if (a === "addtask") {
+      const d = parse(S.sel);
+      $("#nt-repeat").innerHTML = `<option value="once">Just on ${esc(fmtDate(S.sel))}</option><option value="weekly">Every ${DOW_LONG[d.getDay()]}</option>`;
+      $("#task-panel").hidden = false; $("#nt-title").focus();
+    }
+    else if (a === "close-overlay") { closeOverlays(); }
+  });
+  document.addEventListener("input", (ev) => {
+    const t = ev.target;
+    if (t.dataset.draft) (S.drafts[t.dataset.draft] ||= {}).text = t.value;
+  });
+  document.addEventListener("change", async (ev) => {
+    const t = ev.target;
+    if (t.dataset.markdone) (S.drafts[t.dataset.markdone] ||= {}).markDone = t.checked;
+    if (t.dataset.file && t.files[0]) {
+      const key = t.dataset.file, blob = await shrink(t.files[0]);
+      if (S.pending[key]) URL.revokeObjectURL(S.pending[key].url);
+      S.pending[key] = { blob, url: URL.createObjectURL(blob) }; render();
+    }
+    if (t.id === "lead") { S.lead = Number(t.value); store.set("otos-lead", t.value); tick(true); }
+  });
+  $("#task-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const title = $("#nt-title").value.trim(); if (!title || !S.db) return;
+    const rec = { title, child: $("#nt-child").value, time: $("#nt-time").value, detail: $("#nt-detail").value.trim(), by: S.me || "guest", at: Date.now() };
+    if ($("#nt-repeat").value === "weekly") rec.dows = [parse(S.sel).getDay()]; else rec.date = S.sel;
+    if (!rec.time) delete rec.time;
+    $("#nt-save").disabled = true;
+    try { await S.db.collection("tasks").add(rec); $("#task-form").reset(); closeOverlays(); toast("Task added for everyone."); }
+    catch { toast("Couldn't add that task. Try again."); }
+    $("#nt-save").disabled = false;
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeOverlays(); });
+  for (const id of ["bell-panel", "task-panel"]) $("#" + id).addEventListener("click", (e) => { if (e.target.id === id) closeOverlays(); });
+
+  /* ---------- start ---------- */
+  async function init() {
+    render(); tick(true);
+    setInterval(() => tick(false), 30000);
+    if (!window.claude || !window.claude.use) { setLive("offline"); return; }
+    const use = async (n) => { try { return await window.claude.use(n); } catch { return null; } };
+    const [db, user, assets] = await Promise.all([use("db"), use("user"), use("assets")]);
+    S.db = db; S.userCap = user; S.assets = assets;
+    if (user) {
+      try { S.me = await user.id(); } catch {}
+      try { const c = await user.can("data.write"); S.canWrite = c !== false; } catch {}
+    }
+    if (!db) { setLive("offline"); render(); return; }
+    if (!S.canWrite) setLive("readonly");
+    render(); subscribe();
+  }
+  init();
+})();
+</script>
